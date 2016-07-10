@@ -1,0 +1,115 @@
+import org.apache.tools.ant.filters.ReplaceTokens
+
+apply plugin: 'java'
+
+sourceCompatibility = '1.8'
+[compileJava, compileTestJava]*.options*.encoding = 'UTF-8'
+
+// NetBeans will automatically add "run" and "debug" tasks relying on the
+// "mainClass" property. You may however define the property prior executing
+// tasks by passing a "-PmainClass=<QUALIFIED_CLASS_NAME>" argument.
+//
+// Note however, that you may define your own "run" and "debug" task if you
+// prefer. In this case NetBeans will not add these tasks but you may rely on
+// your own implementation.
+if (!hasProperty('mainClass')) {
+    ext.mainClass = 'omathe.gui.Main'
+}
+
+/*configurations.all {
+    // Check for updates every build
+    resolutionStrategy.cacheChangingModulesFor 0, 'seconds'
+}*/
+
+repositories {
+    mavenCentral()
+    // You may define additional repositories, or even remove "mavenCentral()".
+    // Read more about repositories here:
+    //   http://www.gradle.org/docs/current/userguide/dependency_management.html#sec:repositories
+}
+
+dependencies {
+    compile 'com.drewnoakes:metadata-extractor:2.8.1'
+    compile ('log4j:log4j:1.2.17') /*{changing = true}*/
+    compile 'no.tornado:fxlauncher:1.0.8'
+
+    testCompile group: 'junit', name: 'junit', version: '4.10'
+}
+
+// FXlauncher
+
+// Installer Filename without suffix
+def appFilename = 'photo-archiver'
+
+// The JavaFX Application class name
+def appMainClass = 'omathe.gui.Main'
+
+// Optional parameters to the application, will be embedded in the launcher and can be overriden on the command line
+def appParameters = '--myOption=myValue --myOtherOption=myOtherValue'
+
+// The Application vendor used by javapackager
+def appVendor = 'omathe'
+
+// The Application version used by javapackager
+def appVersion = '1.0'
+
+// Base URL where you will host the application artifacts
+def appUrl = 'http://omathe.free.fr/photo-archiver/'
+
+// Optional scp target for application artifacts hosted at the above url
+def appDeployTarget = 'w48839@fxldemo.tornado.no:fxldemo'
+
+jar.archiveName = "photo-archiver.jar"
+
+task buildApp(dependsOn: ['copyDependencies', 'generateAppManifest', 'embedAppManifest'])
+
+task copyDependencies {
+    dependsOn jar
+    configurations.runtime.resolvedConfiguration.resolvedArtifacts.each { artifact ->
+        project.copy {
+            from artifact.file
+            into 'build/libs'
+            rename { "${artifact.name}.${artifact.extension}" }
+        }
+    }
+}
+
+task generateAppManifest(type: JavaExec) {
+    main = 'fxlauncher.CreateManifest'
+    classpath = sourceSets.main.runtimeClasspath
+    args = [appUrl, appMainClass, 'build/libs', appParameters]
+}
+
+task embedAppManifest(type: Exec) {
+    mustRunAfter 'generateAppManifest'
+    workingDir 'build/libs'
+    commandLine 'jar', 'uf', 'fxlauncher.jar', 'app.xml'
+}
+
+task installer(type: Exec, dependsOn: 'buildApp') {
+    commandLine 'javapackager', '-deploy', '-native', '-outdir', 'installer', '-outfile', appFilename, '-srcdir', 'build/libs', '-srcfiles', 'fxlauncher.jar', '-appclass', 'fxlauncher.Launcher', '-name', "${rootProject.name}", '-title', "${rootProject.name}", '-vendor', "$appVendor", '-BappVersion=' + appVersion
+}
+
+task deployApp(type: Exec) {
+    commandLine 'scp', '-r', 'build/libs', appDeployTarget
+}
+
+jar {
+    
+    rootSpec.exclude("main.fxml")
+    doLast {
+        
+        println "fin"
+        
+    }
+}
+
+processResources {
+    
+    from('src/main/resources') {
+        include '*.txt'
+        filter(ReplaceTokens, tokens: [version : '1000'])
+    }
+}
+
+
